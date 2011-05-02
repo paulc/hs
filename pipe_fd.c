@@ -8,6 +8,19 @@
 #include <unistd.h>
 
 #include "pipe_fd.h"
+#include "blf_keygen.c"
+
+void exec_child(char *cmd,int p_in[2],int p_out[2]) {
+    dup2(p_in[0],0);
+    dup2(p_out[1],1);
+    close(p_in[0]);
+    close(p_in[1]);
+    close(p_out[0]);
+    close(p_out[1]);
+    execl("/bin/sh","sh","-c",cmd,NULL);
+    perror("Exec failed");
+    exit(255);
+}
 
 int pipe_fd(char *cmd, int fd_in, int fd_out) {
     /* Connect cmd to fd */
@@ -25,17 +38,7 @@ int pipe_fd(char *cmd, int fd_in, int fd_out) {
         return -1;
     } else if (pid == 0) {
         /* Child - exec cmd */
-        close(fd_in);
-        close(fd_out);
-        dup2(p_in[0],0);
-        dup2(p_out[1],1);
-        close(p_in[0]);
-        close(p_in[1]);
-        close(p_out[0]);
-        close(p_out[1]);
-        execl("/bin/sh","sh","-c",cmd,NULL);
-        perror("Exec failed");
-        exit(255);
+        exec_child(cmd,p_in,p_out);
     } else {
         /* Parent */
 
@@ -96,21 +99,13 @@ int pipe_fd_select(char *cmd, int fd_in, int fd_out) {
         return -1;
     } else if (pid == 0) {
         /* Child - exec cmd */
-        dup2(p_in[0],0);
-        dup2(p_out[1],1);
-        close(p_in[0]);
-        close(p_in[1]);
-        close(p_out[0]);
-        close(p_out[1]);
-        execl("/bin/sh","sh","-c",cmd,NULL);
-        perror("Exec failed");
-        exit(255);
+        close(fd_in);
+        close(fd_out);
+        exec_child(cmd,p_in,p_out);
     } else {
         /* Parent */
-
         close(p_in[0]);
         close(p_out[1]);
-
         int fds[4] = {fd_in,fd_out,p_in[1],p_out[0]};
         select_fds(fds);
     }
@@ -121,7 +116,6 @@ int pipe_fd_select(char *cmd, int fd_in, int fd_out) {
 
 void select_fds(int fds[4]) {
     // {fd_in,fd_out,p_in[1],p_out[0]};
-
     int n;
     char *buf_in[BUF_LEN], *buf_out[BUF_LEN];
     int count_in = 0, count_out = 0;
