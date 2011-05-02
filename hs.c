@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
                 exit(-1);
             }
         }
-        pipe_fd(cmd,fd_in,fd_out);
+        pipe_fd_select(cmd,fd_in,fd_out);
     }
     return 0;
 }
