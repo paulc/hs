@@ -7,6 +7,7 @@
 #include <sys/select.h>
 #include <unistd.h>
 
+#include "pipe_fd.h"
 
 int pipe_fd(char *cmd, int fd_in, int fd_out) {
     /* Connect cmd to fd */
@@ -107,108 +108,113 @@ int pipe_fd_select(char *cmd, int fd_in, int fd_out) {
     } else {
         /* Parent */
 
-#define BUF_LEN 4096
-
-        int n;
-        char *buf_in[BUF_LEN], *buf_out[BUF_LEN];
-        int count_in = 0, count_out = 0;
-        fd_set rfd,wfd;
-
         close(p_in[0]);
         close(p_out[1]);
 
-        bzero(buf_in,BUF_LEN);
-        bzero(buf_out,BUF_LEN);
-
-        enum {FD_IN,FD_OUT,PIPE_IN,PIPE_OUT};
-        int eof[4] = {0,0,0,0};
         int fds[4] = {fd_in,fd_out,p_in[1],p_out[0]};
+        select_fds(fds);
+    }
+    return -1;
+}
 
-        while (!eof[FD_OUT] || !eof[PIPE_OUT]) {
-            FD_ZERO(&rfd);
-            FD_ZERO(&wfd);
+#define BUF_LEN 4096
 
-            if (!eof[FD_IN]) FD_SET(fds[FD_IN],&rfd);
-            if (!eof[FD_OUT]) FD_SET(fds[FD_OUT],&wfd);
-            if (!eof[PIPE_IN]) FD_SET(fds[PIPE_IN],&wfd);
-            if (!eof[PIPE_OUT]) FD_SET(fds[PIPE_OUT],&rfd);
+void select_fds(int fds[4]) {
+    // {fd_in,fd_out,p_in[1],p_out[0]};
 
-            if ((n = select(FD_SETSIZE,&rfd,&wfd,NULL,NULL)) < 0) {
-                perror("Select failed");
-                exit(-1);
+    int n;
+    char *buf_in[BUF_LEN], *buf_out[BUF_LEN];
+    int count_in = 0, count_out = 0;
+    fd_set rfd,wfd;
+    bzero(buf_in,BUF_LEN);
+    bzero(buf_out,BUF_LEN);
+
+    enum {FD_IN,FD_OUT,PIPE_IN,PIPE_OUT};
+
+    int eof[4] = {0,0,0,0};
+
+    while (!eof[FD_OUT] || !eof[PIPE_OUT]) {
+        FD_ZERO(&rfd);
+        FD_ZERO(&wfd);
+
+        if (!eof[FD_IN]) FD_SET(fds[FD_IN],&rfd);
+        if (!eof[FD_OUT]) FD_SET(fds[FD_OUT],&wfd);
+        if (!eof[PIPE_IN]) FD_SET(fds[PIPE_IN],&wfd);
+        if (!eof[PIPE_OUT]) FD_SET(fds[PIPE_OUT],&rfd);
+
+        if ((n = select(FD_SETSIZE,&rfd,&wfd,NULL,NULL)) < 0) {
+            perror("Select failed");
+            exit(-1);
+        }
+
+        //if (FD_ISSET(fds[FD_IN],&rfd)) fprintf(stderr,">>FD_IN readable\n");
+        //if (FD_ISSET(fds[FD_OUT],&wfd)) fprintf(stderr,">>FD_OUT writable\n");
+        //if (FD_ISSET(fds[PIPE_IN],&wfd)) fprintf(stderr,">>PIPE_IN writable\n");
+        //if (FD_ISSET(fds[PIPE_OUT],&rfd)) fprintf(stderr,">>PIPE_OUT readable\n");
+
+        if (FD_ISSET(fds[FD_IN],&rfd) && count_in < BUF_LEN) {
+            /* Read from input */
+            if ((n = read(fds[FD_IN],buf_in+count_in,BUF_LEN-count_in)) > 0) {
+                //fprintf(stderr,"Read from input: %d\n",n);
+                count_in += n;
+            } else {
+                //fprintf(stderr,"Close FD_IN\n");
+                close(fds[FD_IN]);
+                eof[FD_IN] = 1;
             }
-
-            //if (FD_ISSET(fds[FD_IN],&rfd)) fprintf(stderr,">>FD_IN readable\n");
-            //if (FD_ISSET(fds[FD_OUT],&wfd)) fprintf(stderr,">>FD_OUT writable\n");
-            //if (FD_ISSET(fds[PIPE_IN],&wfd)) fprintf(stderr,">>PIPE_IN writable\n");
-            //if (FD_ISSET(fds[PIPE_OUT],&rfd)) fprintf(stderr,">>PIPE_OUT readable\n");
-
-            if (FD_ISSET(fds[FD_IN],&rfd) && count_in < BUF_LEN) {
-                /* Read from input */
-                if ((n = read(fd_in,buf_in+count_in,BUF_LEN-count_in)) > 0) {
-                    //fprintf(stderr,"Read from input: %d\n",n);
-                    count_in += n;
-                } else {
-                    //fprintf(stderr,"Close FD_IN\n");
-                    close(fds[FD_IN]);
-                    eof[FD_IN] = 1;
+        }
+        if (FD_ISSET(fds[PIPE_OUT],&rfd) && count_out < BUF_LEN) {
+            /* Read from pipe */
+            if ((n = read(fds[PIPE_OUT],buf_out+count_out,BUF_LEN-count_out)) > 0) {
+                //fprintf(stderr,"Read from pipe: %d\n",n);
+                count_out += n;
+            } else {
+                //fprintf(stderr,"Close PIPE_OUT\n");
+                close(fds[PIPE_OUT]);
+                eof[PIPE_OUT] = 1;
+            }
+        }
+        if (FD_ISSET(fds[PIPE_IN],&wfd) && count_in > 0) {
+            /* Write to pipe */
+            if ((n = write(fds[PIPE_IN],buf_in,count_in)) > 0) {
+                //fprintf(stderr,"Wrote to pipe: %d\n",n);
+                count_in -= n;
+                if (count_in) {
+                    memmove(buf_out,buf_in+n,count_in);
                 }
-            }
-            if (FD_ISSET(fds[PIPE_OUT],&rfd) && count_out < BUF_LEN) {
-                /* Read from pipe */
-                if ((n = read(p_out[0],buf_out+count_out,BUF_LEN-count_out)) > 0) {
-                    //fprintf(stderr,"Read from pipe: %d\n",n);
-                    count_out += n;
-                } else {
-                    //fprintf(stderr,"Close PIPE_OUT\n");
-                    close(fds[PIPE_OUT]);
-                    eof[PIPE_OUT] = 1;
-                }
-            }
-            if (FD_ISSET(fds[PIPE_IN],&wfd) && count_in > 0) {
-                /* Write to pipe */
-                if ((n = write(p_in[1],buf_in,count_in)) > 0) {
-                    //fprintf(stderr,"Wrote to pipe: %d\n",n);
-                    count_in -= n;
-                    if (count_in) {
-                        memmove(buf_out,buf_in+n,count_in);
-                    }
-                } else {
-                    //fprintf(stderr,"Close PIPE_IN\n");
-                    close(fds[PIPE_IN]);
-                    eof[PIPE_IN] = 1;
-                }
-            }
-            if (FD_ISSET(fds[FD_OUT],&wfd) && count_out > 0) {
-                /* Write to output */
-                if ((n = write(fd_out,buf_out,count_out)) > 0) {
-                    //fprintf(stderr,"Wrote to output: %d\n",n);
-                    count_out -= n;
-                    if (count_out) {
-                        memmove(buf_out,buf_out+n,count_out);
-                    } 
-                } else {
-                    //fprintf(stderr,"Close FD_OUT\n");
-                    close(fds[FD_OUT]);
-                    eof[FD_OUT] = 1;
-                }
-            }
-            if (count_in == 0 && eof[FD_IN] && !eof[PIPE_IN]) {
-                //fprintf(stderr,"FD_IN closed & buffer empty - close PIPE_IN\n");
+            } else {
+                //fprintf(stderr,"Close PIPE_IN\n");
                 close(fds[PIPE_IN]);
                 eof[PIPE_IN] = 1;
             }
-            if (count_out == 0 && eof[PIPE_OUT] && !eof[FD_OUT]) {
-                //fprintf(stderr,"PIPE_OUT closed & buffer empty - close FD_OUT\n");
+        }
+        if (FD_ISSET(fds[FD_OUT],&wfd) && count_out > 0) {
+            /* Write to output */
+            if ((n = write(fds[FD_OUT],buf_out,count_out)) > 0) {
+                //fprintf(stderr,"Wrote to output: %d\n",n);
+                count_out -= n;
+                if (count_out) {
+                    memmove(buf_out,buf_out+n,count_out);
+                } 
+            } else {
+                //fprintf(stderr,"Close FD_OUT\n");
                 close(fds[FD_OUT]);
                 eof[FD_OUT] = 1;
             }
-
-            //fprintf(stderr,"-- EOF: FD_IN:%d FD_OUT:%d PIPE_IN:%d PIPE_OUT:%d\n",
-            //            eof[FD_IN],eof[FD_OUT],eof[PIPE_IN],eof[PIPE_OUT]);
-
         }
+        if (count_in == 0 && eof[FD_IN] && !eof[PIPE_IN]) {
+            //fprintf(stderr,"FD_IN closed & buffer empty - close PIPE_IN\n");
+            close(fds[PIPE_IN]);
+            eof[PIPE_IN] = 1;
+        }
+        if (count_out == 0 && eof[PIPE_OUT] && !eof[FD_OUT]) {
+            //fprintf(stderr,"PIPE_OUT closed & buffer empty - close FD_OUT\n");
+            close(fds[FD_OUT]);
+            eof[FD_OUT] = 1;
+        }
+
+        //fprintf(stderr,"-- EOF: FD_IN:%d FD_OUT:%d PIPE_IN:%d PIPE_OUT:%d\n",
+        //            eof[FD_IN],eof[FD_OUT],eof[PIPE_IN],eof[PIPE_OUT]);
     }
-    return -1;
 }
 

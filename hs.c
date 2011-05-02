@@ -1,5 +1,6 @@
 
 #include <getopt.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +17,7 @@ int main(int argc, char **argv) {
     char *p = NULL;
     int fd_in = 0, fd_out = 1;
     char *remote = NULL;
+    char *bind = NULL;
     int port = 9876;
     int server = 0;
 
@@ -24,12 +26,13 @@ int main(int argc, char **argv) {
         { "remote",     required_argument,  NULL, 'r' },
         { "port",       required_argument,  NULL, 'p' },
         { "server",     no_argument,        NULL, 's' },
+        { "bind",       required_argument,  NULL, 'b' },
         { "help",       no_argument,        NULL, 'h' }
     };
 
     char ch;
 
-    while ((ch = getopt_long(argc, argv, "c:r:p:sh", longopts, NULL)) != -1) {
+    while ((ch = getopt_long(argc, argv, "c:r:p:sb:h", longopts, NULL)) != -1) {
         switch(ch) {
             case 'c':
                 cmd = optarg;
@@ -53,16 +56,34 @@ int main(int argc, char **argv) {
             case 's':
                 server = 1;
                 break;
+            case 'b':
+                bind = optarg;
+                break;
             case 'h':
                 fprintf(stderr,USAGE);
                 exit(-1);
         }
     }
 
+
+    char err[ANET_ERR_LEN];
     if (server) {
+        char c_ip[1024];
+        int s_fd,c_fd,c_port;
+
+        if ((s_fd = anetTcpServer(err,port,bind)) == ANET_ERR) {
+            fprintf(stderr,"Error creating server: %s",err);
+            exit(-1);
+        }
+        if ((c_fd = anetAccept(err,s_fd,c_ip,&c_port)) == ANET_ERR) {
+            fprintf(stderr,"Error accepting client connection: %s",err);
+            exit(-1);
+        }
+        fprintf(stderr,"Connection from: %s port %d\n",c_ip,c_port);
+        int fds[4] = {0,1,c_fd,c_fd};
+        select_fds(fds);
     } else {
         if (remote) {
-            char err[ANET_ERR_LEN];
             if ((fd_in = fd_out = anetTcpConnect(err,remote,port)) == ANET_ERR) {
                 fprintf(stderr,"Could not connect to server: %s",err);
                 exit(-1);
