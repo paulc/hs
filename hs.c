@@ -130,6 +130,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
         while (1) {
+            fprintf(stderr,"--- Listening port %d\n",port);
             if ((c_fd = anetAccept(err,s_fd,c_ip,&c_port)) == ANET_ERR) {
                 fprintf(stderr,"Error accepting client connection: %s",err);
                 exit(-1);
@@ -156,7 +157,7 @@ int main(int argc, char **argv) {
                     if (count++ > 0) {
                         sleep(interval);
                     }
-                    fprintf(stderr,"Connecting - attempt %d\n",count);
+                    //fprintf(stderr,"Connecting - attempt %d\n",count);
                     if ((fd_in = fd_out = anetTcpConnect(err,remote,port)) != ANET_ERR) {
                         connected = 1;
                         break;
