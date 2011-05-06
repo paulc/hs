@@ -1,11 +1,11 @@
 
 CC ?= gcc
 AR ?= ar
-CFLAGS = -Wall -Werror -O2 -std=gnu99
+CFLAGS = -Wall -Werror -Wno-deprecated-declarations -O2 -std=gnu99
 LDFLAGS = 
 DEBUG ?= -g -rdynamic -ggdb
 
-OBJ = pipe_fd.o anet.o blowfish.o blf_keygen.o
+OBJ = pipe_fd.o anet.o
 LIB = 
 PROGS = hs
 
@@ -13,10 +13,8 @@ all : $(PROGS) $(LIB)
 
 # Deps (from 'make dep')
 anet.o: anet.c fmacros.h anet.h
-blf_keygen.o: blf_keygen.c blowfish.h
-blowfish.o: blowfish.c blowfish.h
-hs.o: hs.c pipe_fd.h
-pipe_fd.o: pipe_fd.c
+hs.o: hs.c pipe_fd.h anet.h
+pipe_fd.o: pipe_fd.c pipe_fd.h
 
 # Targets
 

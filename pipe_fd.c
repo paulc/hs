@@ -5,10 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
+#include <stdint.h>
 #include <unistd.h>
 
 #include "pipe_fd.h"
-#include "blf_keygen.c"
 
 void exec_child(char *cmd,int p_in[2],int p_out[2]) {
     dup2(p_in[0],0);
@@ -17,6 +17,7 @@ void exec_child(char *cmd,int p_in[2],int p_out[2]) {
     close(p_in[1]);
     close(p_out[0]);
     close(p_out[1]);
+    close(2);
     execl("/bin/sh","sh","-c",cmd,NULL);
     perror("Exec failed");
     exit(255);
@@ -83,7 +84,7 @@ int pipe_fd(char *cmd, int fd_in, int fd_out) {
     return -1;
 }
 
-int pipe_fd_select(char *cmd, int fd_in, int fd_out) {
+int pipe_fd_select(char *cmd, int fd_in, int fd_out, char *xor) {
     /* Connect cmd to fd */
     int p_in[2],p_out[2];
     pid_t pid;
@@ -107,18 +108,28 @@ int pipe_fd_select(char *cmd, int fd_in, int fd_out) {
         close(p_in[0]);
         close(p_out[1]);
         int fds[4] = {fd_in,fd_out,p_in[1],p_out[0]};
-        select_fds(fds);
+        select_fds(fds,xor);
     }
     return -1;
 }
 
 #define BUF_LEN 4096
 
-void select_fds(int fds[4]) {
+void xor_block(char *data,int count,char *xor, int *xor_index) {
+    for (int i = 0; i < count; i++) {
+        //fprintf(stderr,"xor: %c %% %c ->",*(data + i),*(xor + *xor_index));
+        *(data + i) = *(data + i) ^ *(xor + *xor_index);
+        *xor_index = ((*xor_index) + 1) % strlen(xor);
+        //fprintf(stderr,"= %c\n",*(data + i));
+    }
+}
+
+void select_fds(int fds[4],char *xor) {
     // {fd_in,fd_out,p_in[1],p_out[0]};
     int n;
     char *buf_in[BUF_LEN], *buf_out[BUF_LEN];
-    int count_in = 0, count_out = 0;
+    int n_in = 0, n_out = 0;
+    int  xor_rindex = 0, xor_windex = 0;
     fd_set rfd,wfd;
     bzero(buf_in,BUF_LEN);
     bzero(buf_out,BUF_LEN);
@@ -128,6 +139,7 @@ void select_fds(int fds[4]) {
     int eof[4] = {0,0,0,0};
 
     while (!eof[FD_OUT] || !eof[PIPE_OUT]) {
+
         FD_ZERO(&rfd);
         FD_ZERO(&wfd);
 
@@ -138,7 +150,7 @@ void select_fds(int fds[4]) {
 
         if ((n = select(FD_SETSIZE,&rfd,&wfd,NULL,NULL)) < 0) {
             perror("Select failed");
-            exit(-1);
+            return;
         }
 
         //if (FD_ISSET(fds[FD_IN],&rfd)) fprintf(stderr,">>FD_IN readable\n");
@@ -146,35 +158,41 @@ void select_fds(int fds[4]) {
         //if (FD_ISSET(fds[PIPE_IN],&wfd)) fprintf(stderr,">>PIPE_IN writable\n");
         //if (FD_ISSET(fds[PIPE_OUT],&rfd)) fprintf(stderr,">>PIPE_OUT readable\n");
 
-        if (FD_ISSET(fds[FD_IN],&rfd) && count_in < BUF_LEN) {
+        if (FD_ISSET(fds[FD_IN],&rfd) && n_in < BUF_LEN) {
             /* Read from input */
-            if ((n = read(fds[FD_IN],buf_in+count_in,BUF_LEN-count_in)) > 0) {
+            if ((n = read(fds[FD_IN],buf_in+n_in,BUF_LEN-n_in)) > 0) {
                 //fprintf(stderr,"Read from input: %d\n",n);
-                count_in += n;
+                if (xor) {
+                    xor_block((char *)(buf_in+n_in),n,xor,&xor_rindex);
+                }
+                n_in += n;
             } else {
                 //fprintf(stderr,"Close FD_IN\n");
                 close(fds[FD_IN]);
                 eof[FD_IN] = 1;
             }
         }
-        if (FD_ISSET(fds[PIPE_OUT],&rfd) && count_out < BUF_LEN) {
+        if (FD_ISSET(fds[PIPE_OUT],&rfd) && n_out < BUF_LEN) {
             /* Read from pipe */
-            if ((n = read(fds[PIPE_OUT],buf_out+count_out,BUF_LEN-count_out)) > 0) {
+            if ((n = read(fds[PIPE_OUT],buf_out+n_out,BUF_LEN-n_out)) > 0) {
                 //fprintf(stderr,"Read from pipe: %d\n",n);
-                count_out += n;
+                if (xor) {
+                    xor_block((char *)(buf_out+n_out),n,xor,&xor_windex);
+                }
+                n_out += n;
             } else {
                 //fprintf(stderr,"Close PIPE_OUT\n");
                 close(fds[PIPE_OUT]);
                 eof[PIPE_OUT] = 1;
             }
         }
-        if (FD_ISSET(fds[PIPE_IN],&wfd) && count_in > 0) {
+        if (FD_ISSET(fds[PIPE_IN],&wfd) && n_in > 0) {
             /* Write to pipe */
-            if ((n = write(fds[PIPE_IN],buf_in,count_in)) > 0) {
+            if ((n = write(fds[PIPE_IN],buf_in,n_in)) > 0) {
                 //fprintf(stderr,"Wrote to pipe: %d\n",n);
-                count_in -= n;
-                if (count_in) {
-                    memmove(buf_out,buf_in+n,count_in);
+                n_in -= n;
+                if (n_in) {
+                    memmove(buf_out,buf_in+n,n_in);
                 }
             } else {
                 //fprintf(stderr,"Close PIPE_IN\n");
@@ -182,13 +200,13 @@ void select_fds(int fds[4]) {
                 eof[PIPE_IN] = 1;
             }
         }
-        if (FD_ISSET(fds[FD_OUT],&wfd) && count_out > 0) {
+        if (FD_ISSET(fds[FD_OUT],&wfd) && n_out > 0) {
             /* Write to output */
-            if ((n = write(fds[FD_OUT],buf_out,count_out)) > 0) {
+            if ((n = write(fds[FD_OUT],buf_out,n_out)) > 0) {
                 //fprintf(stderr,"Wrote to output: %d\n",n);
-                count_out -= n;
-                if (count_out) {
-                    memmove(buf_out,buf_out+n,count_out);
+                n_out -= n;
+                if (n_out) {
+                    memmove(buf_out,buf_out+n,n_out);
                 } 
             } else {
                 //fprintf(stderr,"Close FD_OUT\n");
@@ -196,12 +214,12 @@ void select_fds(int fds[4]) {
                 eof[FD_OUT] = 1;
             }
         }
-        if (count_in == 0 && eof[FD_IN] && !eof[PIPE_IN]) {
+        if (n_in == 0 && eof[FD_IN] && !eof[PIPE_IN]) {
             //fprintf(stderr,"FD_IN closed & buffer empty - close PIPE_IN\n");
             close(fds[PIPE_IN]);
             eof[PIPE_IN] = 1;
         }
-        if (count_out == 0 && eof[PIPE_OUT] && !eof[FD_OUT]) {
+        if (n_out == 0 && eof[PIPE_OUT] && !eof[FD_OUT]) {
             //fprintf(stderr,"PIPE_OUT closed & buffer empty - close FD_OUT\n");
             close(fds[FD_OUT]);
             eof[FD_OUT] = 1;
