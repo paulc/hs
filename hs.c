@@ -56,15 +56,16 @@ int main(int argc, char **argv) {
         { "port",       required_argument,  NULL, 'p' },
         { "attempts",   required_argument,  NULL, 'a' },
         { "interval",   required_argument,  NULL, 'i' },
-        { "uuid",       optional_argument,  NULL, 'x' },
+        { "uuid",       optional_argument,  NULL, 'u' },
         { "loop",       optional_argument,  NULL, 'l' },
         { "server",     no_argument,        NULL, 's' },
         { "daemon",     no_argument,        NULL, 'd' },
         { "bind",       required_argument,  NULL, 'b' },
-        { "help",       no_argument,        NULL, 'h' }
+        { "help",       no_argument,        NULL, 'h' },
+        { NULL,         0,                  NULL, 0 }
     };
 
-    while ((option = getopt_long(argc, argv, "c:r:p:i:xla:n:sdb:h", longopts, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:r:p:i:u:l:a:n:sdb:h", longopts, NULL)) != -1) {
         switch(option) {
             case 'c':
                 cmd = optarg;
@@ -91,7 +92,7 @@ int main(int argc, char **argv) {
                     exit(-1);
                 }
                 break;
-            case 'x':
+            case 'u':
                 xor = 1;
                 if (optarg) {
                     init_sha256(optarg,xor_mask);
