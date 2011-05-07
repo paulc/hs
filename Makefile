@@ -5,7 +5,7 @@ CFLAGS = -Wall -Werror -Wno-deprecated-declarations -O2 -std=gnu99
 LDFLAGS = 
 DEBUG ?= -g -rdynamic -ggdb
 
-OBJ = pipe_fd.o anet.o
+OBJ = pipe_fd.o anet.o sha256.o
 LIB = 
 PROGS = hs
 

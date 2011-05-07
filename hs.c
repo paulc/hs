@@ -9,11 +9,24 @@
 
 #include "pipe_fd.h"
 #include "anet.h"
+#include "sha256.h"
 
 #define USAGE "Usage: hs [--cmd <cmd>] [--remote <dest>] [--port <port>] [--daemon]\n" \
-              "          [--attempts <n>] [--interval <secs>] [--x] [--loop]\n" \
-              "       hs [--server] [--port <port>] [--loop] [--x]\n" \
+              "          [--attempts <n>] [--interval <secs>] [--uuid(=<uuid>)] [--loop(=<secs>)]\n" \
+              "       hs [--server] [--port <port>] [--loop(=<secs>)] [--uuid(=<uuid>)]\n" \
               "       hs [--help]\n"
+
+#define MAGIC 2993965596
+#define BUF_LEN 1024
+
+void init_sha256(char *s, uint8_t *digest) {
+    context_sha256_t c;
+    int magic = MAGIC;
+    sha256_starts(&c);
+    sha256_update(&c,(uint8_t *)&magic,(uint32_t)4);
+    sha256_update(&c,(uint8_t *)s,(uint32_t)strlen(s));
+    sha256_finish(&c,digest);
+}
 
 int main(int argc, char **argv) {
 
@@ -22,7 +35,8 @@ int main(int argc, char **argv) {
     int fd_in = 0, fd_out = 1;
     char *remote = NULL;
     char *bind = NULL;
-    char *xor = NULL;
+    uint8_t xor_mask[32];
+    int xor = 0;
     int port = 9876;
     int server = 0;
     int daemonise = 0;
@@ -31,8 +45,10 @@ int main(int argc, char **argv) {
     int attempts = 1;
     int connected = 0;
     int loop = 0;
-    int loop_delay = 60;
-    //char *pidfile = NULL;
+    int n = 0;
+    char *buf;
+    char option;
+    char c;
 
     static struct option longopts[] = {
         { "cmd",        required_argument,  NULL, 'c' },
@@ -41,18 +57,15 @@ int main(int argc, char **argv) {
         { "attempts",   required_argument,  NULL, 'a' },
         { "interval",   required_argument,  NULL, 'i' },
         { "uuid",       optional_argument,  NULL, 'x' },
-        { "loop",       no_argument,        NULL, 'l' },
+        { "loop",       optional_argument,  NULL, 'l' },
         { "server",     no_argument,        NULL, 's' },
         { "daemon",     no_argument,        NULL, 'd' },
         { "bind",       required_argument,  NULL, 'b' },
         { "help",       no_argument,        NULL, 'h' }
     };
 
-    int i = 0;
-    char x,ch;
-
-    while ((ch = getopt_long(argc, argv, "c:r:p:i:xla:n:sdb:h", longopts, NULL)) != -1) {
-        switch(ch) {
+    while ((option = getopt_long(argc, argv, "c:r:p:i:xla:n:sdb:h", longopts, NULL)) != -1) {
+        switch(option) {
             case 'c':
                 cmd = optarg;
                 break;
@@ -79,25 +92,34 @@ int main(int argc, char **argv) {
                 }
                 break;
             case 'x':
+                xor = 1;
                 if (optarg) {
-                    xor = optarg;
+                    init_sha256(optarg,xor_mask);
                 } else {
-                    if ((xor = malloc(1024)) == NULL) {
+                    if ((buf = malloc(BUF_LEN)) == NULL) {
                         fprintf(stderr,"Cant allocate memory\n");
                         exit(-1);
                     }
-                    bzero(xor,1024);
+                    bzero(buf,1024);
                     if (isatty(fileno(stdin))) {
-                        fputs("xor> ",stdout);
+                        fputs("uuid> ",stdout);
                     }
-                    while ((x = fgetc(stdin)) != EOF) {
-                        if (x == '\n') break;
-                        *(xor + i++) = x;
+                    while ((c = fgetc(stdin)) != EOF && ++n < BUF_LEN) {
+                        if (c == '\n') break;
+                        buf[n-1] = c;
                     }
+                    init_sha256(buf,xor_mask);
                 }
                 break;
             case 'l':
-                loop = 1;
+                if (optarg) {
+                    if ((loop = strtol(optarg,(char **)NULL,10)) == 0) {
+                        fprintf(stderr,"Invalid loop interval\n");
+                        exit(-1);
+                    }
+                } else {
+                    loop = 60;
+                }
                 break;
             case 'a':
                 if ((attempts = strtol(optarg,(char **)NULL,10)) == 0) {
@@ -137,7 +159,7 @@ int main(int argc, char **argv) {
             }
             fprintf(stderr,"--- Connection from: %s port %d\n",c_ip,c_port);
             int fds[4] = {0,1,c_fd,c_fd};
-            select_fds(fds,xor);
+            select_fds(fds,xor ? xor_mask : NULL);
             fprintf(stderr,"--- Disconnected\n");
             if (!loop) {
                 break;
@@ -157,7 +179,7 @@ int main(int argc, char **argv) {
                     if (count++ > 0) {
                         sleep(interval);
                     }
-                    //fprintf(stderr,"Connecting - attempt %d\n",count);
+                    fprintf(stderr,"--- Connecting - attempt %d\n",count);
                     if ((fd_in = fd_out = anetTcpConnect(err,remote,port)) != ANET_ERR) {
                         connected = 1;
                         break;
@@ -170,13 +192,13 @@ int main(int argc, char **argv) {
                 connected = 1;
             }
             if (connected) {
-                pipe_fd_select(cmd,fd_in,fd_out,xor);
+                pipe_fd_select(cmd,fd_in,fd_out,xor ? xor_mask : NULL);
                 connected = 0;
             }
-            if (!loop) {
+            if (loop == 0) {
                 break;
             }
-            sleep(loop_delay);
+            sleep(loop);
         }
     }
     return 0;
