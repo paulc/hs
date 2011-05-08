@@ -171,7 +171,7 @@ void select_fds(int fds[4],uint8_t *xor_mask) {
                 n_in += n;
             } else {
                 debug("Close FD_IN\n");
-                close(fds[FD_IN]);
+                //close(fds[FD_IN]);
                 eof[FD_IN] = 1;
             }
         }
@@ -213,7 +213,7 @@ void select_fds(int fds[4],uint8_t *xor_mask) {
                 } 
             } else {
                 debug("Close FD_OUT\n");
-                close(fds[FD_OUT]);
+                //close(fds[FD_OUT]);
                 eof[FD_OUT] = 1;
             }
         }
@@ -230,7 +230,7 @@ void select_fds(int fds[4],uint8_t *xor_mask) {
             debug("PIPE_OUT closed & buffer empty - close FD_OUT\n");
             usleep(10000);
             if (timeout++ > 20) {
-                close(fds[FD_OUT]);
+                //close(fds[FD_OUT]);
                 eof[FD_OUT] = 1;
             }
         }

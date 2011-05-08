@@ -110,6 +110,7 @@ int main(int argc, char **argv) {
                         buf[n-1] = c;
                     }
                     init_sha256(buf,xor_mask);
+                    free(buf);
                 }
                 break;
             case 'l':
@@ -167,13 +168,13 @@ int main(int argc, char **argv) {
             }
         }
     } else {
-        while(1) {
-            if (daemonise) {
-                if (daemon(0,0) == -1) {
-                    perror("Daemon error");
-                    exit(-1);
-                }
+        if (daemonise) {
+            if (daemon(0,0) == -1) {
+                perror("Daemon error");
+                exit(-1);
             }
+        }
+        while(1) {
             if (remote) {
                 count = 0;
                 while (1) {
