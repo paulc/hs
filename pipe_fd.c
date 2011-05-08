@@ -14,9 +14,11 @@
 
 void debug(char *format,...) {
     va_list ap;
-    va_start(ap,format);
-    //vfprintf(stderr,format,ap);
-    va_end(ap);
+    if (getenv("DEBUG")) {
+        va_start(ap,format);
+        vfprintf(stderr,format,ap);
+        va_end(ap);
+    }
 }
 
 void exec_child(char *cmd,int p_in[2],int p_out[2]) {
@@ -161,6 +163,8 @@ void select_fds(int fds[4],uint8_t *xor_mask) {
             return;
         }
 
+        n = 0;
+
         if (FD_ISSET(fds[FD_IN],&rfd) && n_in < BUF_LEN) {
             /* Read from input */
             if ((n = read(fds[FD_IN],buf_in+n_in,BUF_LEN-n_in)) > 0) {
@@ -219,18 +223,17 @@ void select_fds(int fds[4],uint8_t *xor_mask) {
         }
 
         if (n_in == 0 && eof[FD_IN] && !eof[PIPE_OUT]) {
-            debug("FD_IN closed & buffer empty - close PIPE_OUT\n");
+            debug("FD_IN closed & buffer empty - check for timeout\n");
             usleep(10000);
-            if (timeout++ > 20) {
+            if (n == 0 && timeout++ > 20) {
                 close(fds[PIPE_OUT]);
                 eof[PIPE_OUT] = 1;
             }
         }
         if (n_out == 0 && eof[PIPE_OUT] && !eof[FD_OUT]) {
-            debug("PIPE_OUT closed & buffer empty - close FD_OUT\n");
+            debug("PIPE_OUT closed & buffer empty - check for timeout\n");
             usleep(10000);
-            if (timeout++ > 20) {
-                //close(fds[FD_OUT]);
+            if (n == 0 && timeout++ > 20) {
                 eof[FD_OUT] = 1;
             }
         }

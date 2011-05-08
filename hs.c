@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "pipe_fd.h"
 #include "anet.h"
@@ -46,6 +47,8 @@ int main(int argc, char **argv) {
     int connected = 0;
     int loop = 0;
     int n = 0;
+    char timestamp[64];
+    time_t now;;
     char *buf;
     char option;
     char c;
@@ -159,7 +162,9 @@ int main(int argc, char **argv) {
                 fprintf(stderr,"Error accepting client connection: %s",err);
                 exit(-1);
             }
-            fprintf(stderr,"--- Connection from: %s port %d\n",c_ip,c_port);
+            now = time(NULL);
+            strftime(timestamp,64,"%F %T",localtime(&now));
+            fprintf(stderr,"--- Connection from: %s port %d [%s]\n",c_ip,c_port,timestamp);
             int fds[4] = {0,1,c_fd,c_fd};
             select_fds(fds,xor ? xor_mask : NULL);
             fprintf(stderr,"--- Disconnected\n");
