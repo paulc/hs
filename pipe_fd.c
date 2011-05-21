@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/select.h>
 #include <stdint.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "pipe_fd.h"
@@ -95,7 +96,7 @@ int pipe_fd(char *cmd, int fd_in, int fd_out) {
     return -1;
 }
 
-int pipe_fd_select(char *cmd, int fd_in, int fd_out, uint8_t *xor_mask) {
+int pipe_fd_select(char *cmd, int fd_in, int fd_out, uint8_t *xor_mask, int timeout) {
     /* Connect cmd to fd */
     int p_in[2],p_out[2];
     pid_t pid;
@@ -119,7 +120,7 @@ int pipe_fd_select(char *cmd, int fd_in, int fd_out, uint8_t *xor_mask) {
         close(p_in[0]);
         close(p_out[1]);
         int fds[4] = {fd_in,fd_out,p_in[1],p_out[0]};
-        select_fds(fds,xor_mask);
+        select_fds(fds,xor_mask,timeout);
     }
     return -1;
 }
@@ -133,13 +134,14 @@ void xor_block(char *data,int count,uint8_t *xor_mask, int *xor_index) {
     }
 }
 
-void select_fds(int fds[4],uint8_t *xor_mask) {
+void select_fds(int fds[4],uint8_t *xor_mask,int timeout) {
     // {fd_in,fd_out,p_in[1],p_out[0]};
     int n;
     char *buf_in[BUF_LEN], *buf_out[BUF_LEN];
     int n_in = 0, n_out = 0;
     int  xor_rindex = 0, xor_windex = 0;
-    int timeout = 0;
+    int wait_timeout = 0;
+    time_t start = time(NULL),now;
     fd_set rfd,wfd;
     bzero(buf_in,BUF_LEN);
     bzero(buf_out,BUF_LEN);
@@ -222,18 +224,38 @@ void select_fds(int fds[4],uint8_t *xor_mask) {
             }
         }
 
+        if (timeout > 0) {
+            if (n > 0) {
+                start = time(NULL);
+            } else {
+                now = time(NULL);
+                if (difftime(now,start) > timeout) {
+                    debug(">>> Timeout\n");
+                    close(fds[PIPE_OUT]);
+                    close(fds[PIPE_IN]);
+                    close(fds[FD_OUT]);
+                    close(fds[FD_IN]);
+                    eof[PIPE_OUT] = 1;
+                    eof[PIPE_IN] = 1;
+                    eof[FD_OUT] = 1;
+                    eof[FD_IN] = 1;
+                }
+            }
+        }
+
+
         if (n_in == 0 && eof[FD_IN] && !eof[PIPE_OUT]) {
-            debug("FD_IN closed & buffer empty - check for timeout\n");
+            debug("FD_IN closed & buffer empty - check for wait_timeout\n");
             usleep(10000);
-            if (n == 0 && timeout++ > 20) {
+            if (n == 0 && wait_timeout++ > 20) {
                 close(fds[PIPE_OUT]);
                 eof[PIPE_OUT] = 1;
             }
         }
         if (n_out == 0 && eof[PIPE_OUT] && !eof[FD_OUT]) {
-            debug("PIPE_OUT closed & buffer empty - check for timeout\n");
+            debug("PIPE_OUT closed & buffer empty - check for wait_timeout\n");
             usleep(10000);
-            if (n == 0 && timeout++ > 20) {
+            if (n == 0 && wait_timeout++ > 20) {
                 eof[FD_OUT] = 1;
             }
         }

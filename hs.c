@@ -45,10 +45,11 @@ int main(int argc, char **argv) {
     int count = 0;
     int attempts = 1;
     int connected = 0;
+    int timeout = 0;
     int loop = 0;
     int n = 0;
     char timestamp[64];
-    time_t now;;
+    time_t now;
     char *buf;
     char option;
     char c;
@@ -61,6 +62,7 @@ int main(int argc, char **argv) {
         { "interval",   required_argument,  NULL, 'i' },
         { "uuid",       optional_argument,  NULL, 'u' },
         { "loop",       optional_argument,  NULL, 'l' },
+        { "timeout",    required_argument,  NULL, 't' },
         { "server",     no_argument,        NULL, 's' },
         { "daemon",     no_argument,        NULL, 'd' },
         { "bind",       required_argument,  NULL, 'b' },
@@ -68,7 +70,7 @@ int main(int argc, char **argv) {
         { NULL,         0,                  NULL, 0 }
     };
 
-    while ((option = getopt_long(argc, argv, "c:r:p:i:u:l:a:n:sdb:h", longopts, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:r:p:i:u:l:t:a:n:sdb:h", longopts, NULL)) != -1) {
         switch(option) {
             case 'c':
                 cmd = optarg;
@@ -126,6 +128,12 @@ int main(int argc, char **argv) {
                     loop = 60;
                 }
                 break;
+            case 't':
+                if ((timeout = strtol(optarg,(char **)NULL,10)) == 0) {
+                    fprintf(stderr,"Invalid timeout interval\n");
+                    exit(-1);
+                }
+                break;
             case 'a':
                 if ((attempts = strtol(optarg,(char **)NULL,10)) == 0) {
                     fprintf(stderr,"Invalid attempts\n");
@@ -166,7 +174,7 @@ int main(int argc, char **argv) {
             strftime(timestamp,64,"%F %T",localtime(&now));
             fprintf(stderr,"--- Connection from: %s port %d [%s]\n",c_ip,c_port,timestamp);
             int fds[4] = {0,1,c_fd,c_fd};
-            select_fds(fds,xor ? xor_mask : NULL);
+            select_fds(fds,xor ? xor_mask : NULL,timeout);
             fprintf(stderr,"--- Disconnected\n");
             if (!loop) {
                 break;
@@ -199,12 +207,14 @@ int main(int argc, char **argv) {
                 connected = 1;
             }
             if (connected) {
-                pipe_fd_select(cmd,fd_in,fd_out,xor ? xor_mask : NULL);
+                pipe_fd_select(cmd,fd_in,fd_out,xor ? xor_mask : NULL,timeout);
+                fprintf(stderr,"--- Disconnected\n");
                 connected = 0;
             }
             if (loop == 0) {
                 break;
             }
+            fprintf(stderr,"--- Looping (%d secs)\n",loop);
             sleep(loop);
         }
     }
