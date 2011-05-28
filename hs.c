@@ -13,7 +13,7 @@
 #include "sha256.h"
 
 #define USAGE \
-  "Usage: hs [--cmd <cmd>] [--remote <dest>] [--port <port>] [--daemon]" \
+  "Usage: hs [--cmd <cmd>] [--remote <dest>] [--port <port>] [--daemon]\n" \
   "          [--key <key>] [--loop] [--attempts <n>] [--interval <secs>]\n" \
   "       hs [--server] [--port <port>] [--key <key>] [--loop]\n" \
   "       hs [--help]\n"
