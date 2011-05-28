@@ -13,10 +13,21 @@
 #include "sha256.h"
 
 #define USAGE \
-  "Usage: hs [--cmd <cmd>] [--remote <dest>] [--port <port>] [--daemon]\n" \
-  "          [--key <key>] [--loop] [--attempts <n>] [--interval <secs>]\n" \
-  "       hs [--server] [--port <port>] [--key <key>] [--loop]\n" \
-  "       hs [--help]\n"
+  "Usage: hs [--cmd|-c <cmd>]       (Client Mode)\n" \
+  "          [--remote|-r <dest>]\n" \
+  "          [--port|-p <port>]\n" \
+  "          [--daemon|-d]\n" \
+  "          [--key|-k <key>]\n" \
+  "          [--loop|-l]\n" \
+  "          [--attempts|-a <n>]\n" \
+  "          [--interval|-i <secs>]\n" \
+  "          [--timeout|-t <secs>]\n" \
+  "       hs --server|-s            (Server Mode)\n" \
+  "          [--port|-p <port>]\n" \
+  "          [--key|-k <key>]\n" \
+  "          [--loop|-l]\n" \
+  "          [--timeout|-t <secs>]\n" \
+  "       hs [--help|-h]\n"
 
 #define MAGIC 2993965596
 #define BUF_LEN 1024

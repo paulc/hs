@@ -4,6 +4,9 @@ AR ?= ar
 CFLAGS = -Wall -Werror -Wno-deprecated-declarations -O2 -std=gnu99
 LDFLAGS = 
 DEBUG ?= -g -rdynamic -ggdb
+INSTALL = install
+INSTALL_FLAGS = -o root -g wheel 
+INSTALL_DIR = /usr/bin
 
 OBJ = pipe_fd.o anet.o sha256.o
 LIB = 
@@ -27,6 +30,9 @@ hs : hs.o $(OBJ)
 
 dep:
 	$(CC) -MM *.c
+
+install: hs
+	$(INSTALL) $(INSTALL_FLAGS) hs $(INSTALL_DIR)
 
 clean:
 	rm -rf $(PROGS) $(LIB) *.o *~ 
