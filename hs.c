@@ -12,10 +12,11 @@
 #include "anet.h"
 #include "sha256.h"
 
-#define USAGE "Usage: hs [--cmd <cmd>] [--remote <dest>] [--port <port>] [--daemon]\n" \
-              "          [--attempts <n>] [--interval <secs>] [--uuid(=<uuid>)] [--loop(=<secs>)]\n" \
-              "       hs [--server] [--port <port>] [--loop(=<secs>)] [--uuid(=<uuid>)]\n" \
-              "       hs [--help]\n"
+#define USAGE \
+  "Usage: hs [--cmd <cmd>] [--remote <dest>] [--port <port>] [--daemon]" \
+  "          [--key <key>] [--loop] [--attempts <n>] [--interval <secs>]\n" \
+  "       hs [--server] [--port <port>] [--key <key>] [--loop]\n" \
+  "       hs [--help]\n"
 
 #define MAGIC 2993965596
 #define BUF_LEN 1024
@@ -60,8 +61,8 @@ int main(int argc, char **argv) {
         { "port",       required_argument,  NULL, 'p' },
         { "attempts",   required_argument,  NULL, 'a' },
         { "interval",   required_argument,  NULL, 'i' },
-        { "uuid",       optional_argument,  NULL, 'u' },
-        { "loop",       optional_argument,  NULL, 'l' },
+        { "key",        required_argument,  NULL, 'k' },
+        { "loop",       no_argument,        NULL, 'l' },
         { "timeout",    required_argument,  NULL, 't' },
         { "server",     no_argument,        NULL, 's' },
         { "daemon",     no_argument,        NULL, 'd' },
@@ -70,7 +71,7 @@ int main(int argc, char **argv) {
         { NULL,         0,                  NULL, 0 }
     };
 
-    while ((option = getopt_long(argc, argv, "c:r:p:i:u:l:t:a:n:sdb:h", longopts, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:r:p:i:k:lt:a:n:sdb:h", longopts, NULL)) != -1) {
         switch(option) {
             case 'c':
                 cmd = optarg;
@@ -97,18 +98,16 @@ int main(int argc, char **argv) {
                     exit(-1);
                 }
                 break;
-            case 'u':
+            case 'k':
                 xor = 1;
-                if (optarg) {
-                    init_sha256(optarg,xor_mask);
-                } else {
+                if (strcmp(optarg,"-")==0) {
                     if ((buf = malloc(BUF_LEN)) == NULL) {
                         fprintf(stderr,"Cant allocate memory\n");
                         exit(-1);
                     }
-                    bzero(buf,1024);
+                    bzero(buf,BUF_LEN);
                     if (isatty(fileno(stdin))) {
-                        fputs("uuid> ",stdout);
+                        fputs("key> ",stdout);
                     }
                     while ((c = fgetc(stdin)) != EOF && ++n < BUF_LEN) {
                         if (c == '\n') break;
@@ -116,18 +115,25 @@ int main(int argc, char **argv) {
                     }
                     init_sha256(buf,xor_mask);
                     free(buf);
+                } else {
+                    init_sha256(optarg,xor_mask);
                 }
                 break;
             case 'l':
-                if (optarg) {
-                    if ((loop = strtol(optarg,(char **)NULL,10)) == 0) {
-                        fprintf(stderr,"Invalid loop interval\n");
-                        exit(-1);
-                    }
-                } else {
+                if (!loop) {
                     loop = 60;
                 }
                 break;
+//            case 'l':
+//                if (optarg) {
+//                    if ((loop = strtol(optarg,(char **)NULL,10)) == 0) {
+//                        fprintf(stderr,"Invalid loop interval\n");
+//                        exit(-1);
+//                    }
+//                } else {
+//                    loop = 60;
+//                }
+//                break;
             case 't':
                 if ((timeout = strtol(optarg,(char **)NULL,10)) == 0) {
                     fprintf(stderr,"Invalid timeout interval\n");
