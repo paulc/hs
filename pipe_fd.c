@@ -170,13 +170,13 @@ void select_fds(int fds[4],uint8_t *xor_mask,int timeout) {
         if (FD_ISSET(fds[FD_IN],&rfd) && n_in < BUF_LEN) {
             /* Read from input */
             if ((n = read(fds[FD_IN],buf_in+n_in,BUF_LEN-n_in)) > 0) {
-                debug("Read from input: %d\n",n);
+                debug(">>> Read from input: %d\n",n);
                 if (xor_mask) {
                     xor_block((char *)(buf_in+n_in),n,xor_mask,&xor_rindex);
                 }
                 n_in += n;
             } else {
-                debug("Close FD_IN\n");
+                debug(">>> Close FD_IN\n");
                 //close(fds[FD_IN]);
                 eof[FD_IN] = 1;
             }
@@ -184,13 +184,13 @@ void select_fds(int fds[4],uint8_t *xor_mask,int timeout) {
         if (FD_ISSET(fds[PIPE_OUT],&rfd) && n_out < BUF_LEN) {
             /* Read from pipe */
             if ((n = read(fds[PIPE_OUT],buf_out+n_out,BUF_LEN-n_out)) > 0) {
-                debug("Read from pipe: %d\n",n);
+                debug(">>> Read from pipe: %d\n",n);
                 if (xor_mask) {
                     xor_block((char *)(buf_out+n_out),n,xor_mask,&xor_windex);
                 }
                 n_out += n;
             } else {
-                debug("Close PIPE_OUT\n");
+                debug(">>> Close PIPE_OUT\n");
                 close(fds[PIPE_OUT]);
                 eof[PIPE_OUT] = 1;
             }
@@ -198,13 +198,13 @@ void select_fds(int fds[4],uint8_t *xor_mask,int timeout) {
         if (FD_ISSET(fds[PIPE_IN],&wfd) && n_in > 0) {
             /* Write to pipe */
             if ((n = write(fds[PIPE_IN],buf_in,n_in)) > 0) {
-                debug("Wrote to pipe: %d\n",n);
+                debug(">>> Wrote to pipe: %d\n",n);
                 n_in -= n;
                 if (n_in) {
                     memmove(buf_out,buf_in+n,n_in);
                 }
             } else {
-                debug("Close PIPE_IN\n");
+                debug(">>> Close PIPE_IN\n");
                 close(fds[PIPE_IN]);
                 eof[PIPE_IN] = 1;
             }
@@ -212,14 +212,14 @@ void select_fds(int fds[4],uint8_t *xor_mask,int timeout) {
         if (FD_ISSET(fds[FD_OUT],&wfd) && n_out > 0) {
             /* Write to output */
             if ((n = write(fds[FD_OUT],buf_out,n_out)) > 0) {
-                debug("Wrote to output: %d\n",n);
+                debug(">>> Wrote to output: %d\n",n);
                 n_out -= n;
                 if (n_out) {
                     memmove(buf_out,buf_out+n,n_out);
                 } 
             } else {
-                debug("Close FD_OUT\n");
-                //close(fds[FD_OUT]);
+                debug(">>> Close FD_OUT\n");
+                close(fds[FD_OUT]);
                 eof[FD_OUT] = 1;
             }
         }
@@ -245,7 +245,7 @@ void select_fds(int fds[4],uint8_t *xor_mask,int timeout) {
 
 
         if (n_in == 0 && eof[FD_IN] && !eof[PIPE_OUT]) {
-            debug("FD_IN closed & buffer empty - check for wait_timeout\n");
+            debug(">>> FD_IN closed & buffer empty - check for wait_timeout\n");
             usleep(10000);
             if (n == 0 && wait_timeout++ > 20) {
                 close(fds[PIPE_OUT]);
@@ -253,7 +253,7 @@ void select_fds(int fds[4],uint8_t *xor_mask,int timeout) {
             }
         }
         if (n_out == 0 && eof[PIPE_OUT] && !eof[FD_OUT]) {
-            debug("PIPE_OUT closed & buffer empty - check for wait_timeout\n");
+            debug(">>> PIPE_OUT closed & buffer empty - check for wait_timeout\n");
             usleep(10000);
             if (n == 0 && wait_timeout++ > 20) {
                 eof[FD_OUT] = 1;
