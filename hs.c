@@ -19,6 +19,7 @@
   "          [--daemon|-d]\n" \
   "          [--key|-k <key>]\n" \
   "          [--loop|-l]\n" \
+  "          [--wait|-w <secs>]\n" \
   "          [--attempts|-a <n>]\n" \
   "          [--interval|-i <secs>]\n" \
   "          [--timeout|-t <secs>]\n" \
@@ -32,13 +33,22 @@
 #define MAGIC 2993965596
 #define BUF_LEN 1024
 
-void init_sha256(char *s, uint8_t *digest) {
+static void init_sha256(char *s, uint8_t *digest) {
     context_sha256_t c;
     int magic = MAGIC;
     sha256_starts(&c);
     sha256_update(&c,(uint8_t *)&magic,(uint32_t)4);
     sha256_update(&c,(uint8_t *)s,(uint32_t)strlen(s));
     sha256_finish(&c,digest);
+}
+
+static void debug(char *format,...) {
+    va_list ap;
+    if (isatty(fileno(stderr)) || getenv("DEBUG")) {
+        va_start(ap,format);
+        vfprintf(stderr,format,ap);
+        va_end(ap);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -67,22 +77,23 @@ int main(int argc, char **argv) {
     char c;
 
     static struct option longopts[] = {
-        { "cmd",        required_argument,  NULL, 'c' },
-        { "remote",     required_argument,  NULL, 'r' },
-        { "port",       required_argument,  NULL, 'p' },
-        { "attempts",   required_argument,  NULL, 'a' },
-        { "interval",   required_argument,  NULL, 'i' },
-        { "key",        required_argument,  NULL, 'k' },
-        { "loop",       no_argument,        NULL, 'l' },
-        { "timeout",    required_argument,  NULL, 't' },
-        { "server",     no_argument,        NULL, 's' },
-        { "daemon",     no_argument,        NULL, 'd' },
-        { "bind",       required_argument,  NULL, 'b' },
-        { "help",       no_argument,        NULL, 'h' },
-        { NULL,         0,                  NULL, 0 }
+        { "cmd",            required_argument,  NULL, 'c' },
+        { "remote",         required_argument,  NULL, 'r' },
+        { "port",           required_argument,  NULL, 'p' },
+        { "attempts",       required_argument,  NULL, 'a' },
+        { "interval",       required_argument,  NULL, 'i' },
+        { "key",            required_argument,  NULL, 'k' },
+        { "loop",           no_argument,        NULL, 'l' },
+        { "wait",           required_argument,  NULL, 'w' },
+        { "timeout",        required_argument,  NULL, 't' },
+        { "server",         no_argument,        NULL, 's' },
+        { "daemon",         no_argument,        NULL, 'd' },
+        { "bind",           required_argument,  NULL, 'b' },
+        { "help",           no_argument,        NULL, 'h' },
+        { NULL,             0,                  NULL, 0 }
     };
 
-    while ((option = getopt_long(argc, argv, "c:r:p:i:k:lt:a:n:sdb:h", longopts, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "c:r:p:i:k:lw:t:a:n:sdb:h", longopts, NULL)) != -1) {
         switch(option) {
             case 'c':
                 cmd = optarg;
@@ -132,19 +143,15 @@ int main(int argc, char **argv) {
                 break;
             case 'l':
                 if (!loop) {
-                    loop = 60;
+                    loop = 600;
                 }
                 break;
-//            case 'l':
-//                if (optarg) {
-//                    if ((loop = strtol(optarg,(char **)NULL,10)) == 0) {
-//                        fprintf(stderr,"Invalid loop interval\n");
-//                        exit(-1);
-//                    }
-//                } else {
-//                    loop = 60;
-//                }
-//                break;
+            case 'w':
+                if ((loop = strtol(optarg,(char **)NULL,10)) == 0) {
+                    fprintf(stderr,"Invalid wait interval\n");
+                    exit(-1);
+                }
+                break;
             case 't':
                 if ((timeout = strtol(optarg,(char **)NULL,10)) == 0) {
                     fprintf(stderr,"Invalid timeout interval\n");
@@ -182,17 +189,17 @@ int main(int argc, char **argv) {
             exit(-1);
         }
         while (1) {
-            fprintf(stderr,"--- Listening port %d\n",port);
+            debug("--- Listening port %d\n",port);
             if ((c_fd = anetAccept(err,s_fd,c_ip,&c_port)) == ANET_ERR) {
                 fprintf(stderr,"Error accepting client connection: %s",err);
                 exit(-1);
             }
             now = time(NULL);
             strftime(timestamp,64,"%F %T",localtime(&now));
-            fprintf(stderr,"--- Connection from: %s port %d [%s]\n",c_ip,c_port,timestamp);
+            debug("--- Connection from: %s port %d [%s]\n",c_ip,c_port,timestamp);
             int fds[4] = {0,1,c_fd,c_fd};
             select_fds(fds,xor ? xor_mask : NULL,timeout);
-            fprintf(stderr,"--- Disconnected\n");
+            debug("--- Disconnected\n");
             if (!loop) {
                 break;
             }
@@ -211,7 +218,7 @@ int main(int argc, char **argv) {
                     if (count++ > 0) {
                         sleep(interval);
                     }
-                    fprintf(stderr,"--- Connecting - attempt %d\n",count);
+                    debug("--- Connecting - attempt %d\n",count);
                     if ((fd_in = fd_out = anetTcpConnect(err,remote,port)) != ANET_ERR) {
                         connected = 1;
                         break;
@@ -225,13 +232,13 @@ int main(int argc, char **argv) {
             }
             if (connected) {
                 pipe_fd_select(cmd,fd_in,fd_out,xor ? xor_mask : NULL,timeout);
-                fprintf(stderr,"--- Disconnected\n");
+                debug("--- Disconnected\n");
                 connected = 0;
             }
             if (loop == 0) {
                 break;
             }
-            fprintf(stderr,"--- Looping (%d secs)\n",loop);
+            debug("--- Looping (%d secs)\n",loop);
             sleep(loop);
         }
     }

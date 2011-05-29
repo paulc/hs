@@ -13,7 +13,7 @@
 
 #include "pipe_fd.h"
 
-void debug(char *format,...) {
+static void debug(char *format,...) {
     va_list ap;
     if (getenv("DEBUG")) {
         va_start(ap,format);
