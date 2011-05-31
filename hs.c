@@ -199,7 +199,9 @@ int main(int argc, char **argv) {
             debug("--- Connection from: %s port %d [%s]\n",c_ip,c_port,timestamp);
             int fds[4] = {0,1,c_fd,c_fd};
             select_fds(fds,xor ? xor_mask : NULL,timeout);
-            debug("--- Disconnected\n");
+            now = time(NULL);
+            strftime(timestamp,64,"%F %T",localtime(&now));
+            debug("--- Disconnected [%s]\n",timestamp);
             if (!loop) {
                 break;
             }
