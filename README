@@ -1,0 +1,20 @@
+
+hs - a reverse sh
+-----------------
+
+Usage: hs [--cmd|-c <cmd>]       (Client Mode)
+          [--remote|-r <dest>]
+          [--port|-p <port>]
+          [--daemon|-d]
+          [--key|-k <key>]
+          [--loop|-l]
+          [--wait|-w <secs>]
+          [--attempts|-a <n>]
+          [--interval|-i <secs>]
+          [--timeout|-t <secs>]
+       hs --server|-s            (Server Mode)
+          [--port|-p <port>]
+          [--key|-k <key>]
+          [--loop|-l]
+          [--timeout|-t <secs>]
+       hs [--help|-h]
